@@ -5,11 +5,15 @@
 """
 
 import json
+import random
+from datetime import date
 from functools import cache
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+LEARNING_LOG_DIR = Path(__file__).resolve().parent.parent / "learning_log"
 MAX_RESULTS = 3
+LEARNING_LOG_CATEGORIES = {"用語", "考え方", "実装方法"}
 
 
 @cache
@@ -77,3 +81,41 @@ def get_lecture_summary(lecture: int) -> str:
         available = sorted(p.stem for p in (DATA_DIR / "lectures").glob("*.md"))
         return f"第{lecture}回の要点はまだありません。用意されている回: {', '.join(available)}"
     return path.read_text(encoding="utf-8")
+
+
+def make_quiz(lecture: int) -> str:
+    """指定した回の用語から1つ選び、確認問題と答えを返す。
+
+    「第2回の確認問題を出して」のように、復習用の問題を求められたときに使う。
+    """
+    terms = [entry for entry in load_glossary() if entry["lecture"] == lecture]
+    if not terms:
+        return f"第{lecture}回の用語は用語集にありません。"
+
+    term = random.choice(terms)
+    return json.dumps(
+        {"question": f"{term['term']}の意味は？", "answer": term["definition"]},
+        ensure_ascii=False,
+    )
+
+
+def save_learning_log(category: str, content: str) -> str:
+    """学習内容を分野別の記録ファイルに追記する。
+
+    学習した用語・考え方・実装方法を記録してほしいときに使う。
+    明示的な保存依頼にはすぐ使い、それ以外では保存前に利用者の確認を取ってから使う。
+    """
+    if category not in LEARNING_LOG_CATEGORIES:
+        categories = "・".join(sorted(LEARNING_LOG_CATEGORIES))
+        return f"分野は「{categories}」のいずれかを指定してください。"
+    if not content.strip():
+        return "記録内容が空です。保存する学習内容を指定してください。"
+
+    try:
+        LEARNING_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        path = LEARNING_LOG_DIR / f"{category}.md"
+        with path.open("a", encoding="utf-8") as f:
+            f.write(f"## {date.today().isoformat()}\n\n{content.strip()}\n\n")
+    except OSError as e:
+        return f"学習記録を保存できませんでした: {e}"
+    return f"「{category}」の学習記録を保存しました。"

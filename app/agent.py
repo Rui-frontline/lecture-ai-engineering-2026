@@ -16,7 +16,7 @@ import inspect
 import json
 from pathlib import Path
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.exceptions import ModelHTTPError
 from fastmcp import Client
 from pydantic_ai.mcp import MCPToolset, StdioTransport
@@ -35,14 +35,22 @@ INSTRUCTIONS = """\
 - 用語集に見つからないことは、推測で断定せず「用語集にはない」と伝える。
 - 回答の最後に、関係する回（第N回）を示す。
 - 宿題の答えそのものは書かず、考え方のヒントで導く。
+- 利用者が学んだこと、理解したこと、気づいたこと、実装方法を共有したら、
+  学習記録に残す価値があるかを判断し、価値があれば内容を
+  「用語」「考え方」「実装方法」のいずれかに分類して save_learning_log を使う。
+  利用者が「記録して」「保存して」など明示的に依頼した場合は、学習記録に残す価値を
+  自分で判断して取りやめず、内容を分類して save_learning_log をすぐに呼び出す。
+  明示的な依頼がないのに保存価値があると判断した場合は、保存内容と分野を示して
+  利用者に確認を求め、了承されてから save_learning_log を呼び出す。
+  単なる質問や一時的な情報で、記録依頼もない内容は保存しない。
 """
 
 # モデルは実行時に渡す（テストではAPIを呼ばない TestModel に差し替えるため）
-agent = Agent(instructions=INSTRUCTIONS)
+agent = Agent(instructions=INSTRUCTIONS, output_type=[str, DeferredToolRequests])
 agent.tool_plain(tools.search_glossary)
 agent.tool_plain(tools.get_lecture_summary)
-
-# TODO(第3回 演習): tools.py に make_quiz を作り、ここで登録しよう
+agent.tool_plain(tools.make_quiz)
+agent.tool_plain(tools.save_learning_log)
 
 # 第5回: 使う MCP サーバーの設定ファイル。Claude Desktop や Cursor と同じ "mcpServers" 形式
 MCP_CONFIG = Path(__file__).resolve().parent / "mcp_servers.json"
